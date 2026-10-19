@@ -1,11 +1,11 @@
 name: Terraform Deploy
 
 on:
-  # Uncomment to deploy automatically on pushes to main
+  workflow_dispatch:
+  # Uncomment to deploy automatically when changes are pushed to main
   # push:
   #   branches:
   #     - main
-  workflow_dispatch:
 
 permissions:
   id-token: write
