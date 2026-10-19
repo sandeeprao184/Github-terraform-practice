@@ -52,4 +52,4 @@ jobs:
         env:
           TF_VAR_aws_public_key: ${{ secrets.AWS_PUBLIC_KEY }}
           TF_VAR_ssh_allowed_cidr: ${{ secrets.SSH_ALLOWED_CIDR }}
-        run: terraform apply -auto-approve tfplan
+        run: terraform destroy -auto-approve tfplan
