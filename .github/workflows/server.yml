@@ -1,11 +1,11 @@
 
-name: Terraform Destroy
+name: Terraform Destroy All Managed Infrastructure
 
 on:
   workflow_dispatch:
     inputs:
       confirm_destroy:
-        description: "Type DESTROY to confirm infrastructure deletion"
+        description: "Type DESTROY to confirm AWS infrastructure deletion"
         required: true
         type: string
 
@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   terraform-destroy:
-    name: Destroy AWS Infrastructure
+    name: Destroy Terraform Infrastructure
     runs-on: ubuntu-latest
 
     defaults:
@@ -26,15 +26,14 @@ jobs:
       - name: Validate Confirmation
         env:
           CONFIRM_DESTROY: ${{ inputs.confirm_destroy }}
+        shell: bash
         run: |
-          if [ "$CONFIRM_DESTROY" != "DESTROY" ]; then
-            echo "Confirmation failed. Type DESTROY exactly."
+          if [[ "$CONFIRM_DESTROY" != "DESTROY" ]]; then
+            echo "::error::Confirmation failed. Type DESTROY exactly."
             exit 1
           fi
 
-          echo "Destroy confirmation accepted."
-
-      - name: Checkout Code
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Setup Terraform
@@ -46,24 +45,44 @@ jobs:
           role-to-assume: arn:aws:iam::699158992697:role/oidc-role
           aws-region: us-east-1
 
-      - name: Terraform Format Check
-        run: terraform fmt -check -recursive
+      - name: Verify AWS Identity
+        run: aws sts get-caller-identity
 
-      - name: Terraform Init
-        run: terraform init
+      - name: Initialize Terraform
+        run: terraform init -input=false
 
-      - name: Terraform Validate
+      - name: Validate Terraform Configuration
         run: terraform validate
 
-      - name: Terraform Destroy Plan
+      - name: Check Terraform State
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          terraform state list > /tmp/terraform-resources.txt
+
+          if [[ ! -s /tmp/terraform-resources.txt ]]; then
+            echo "::error::No managed resources found in this Terraform state."
+            echo "Check that Terraform is using the same backend, workspace,"
+            echo "and state file used by your deployment workflow."
+            exit 1
+          fi
+
+          echo "Resources tracked in Terraform state:"
+          cat /tmp/terraform-resources.txt
+
+      - name: Preview Infrastructure Deletion
         env:
           TF_VAR_aws_public_key: ${{ secrets.AWS_PUBLIC_KEY }}
           TF_VAR_ssh_allowed_cidr: ${{ secrets.SSH_ALLOWED_CIDR }}
-        run: terraform plan -destroy -out=tfplan
+        run: terraform plan -destroy -input=false
 
-      - name: Terraform Destroy
+      - name: Destroy Infrastructure
         env:
           TF_VAR_aws_public_key: ${{ secrets.AWS_PUBLIC_KEY }}
           TF_VAR_ssh_allowed_cidr: ${{ secrets.SSH_ALLOWED_CIDR }}
-        run: terraform apply -auto-approve tfplan
+        run: terraform destroy -auto-approve -input=false
 
+      - name: Verify Terraform State
+        if: success()
+        run: terraform state list
