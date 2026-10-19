@@ -1,20 +1,25 @@
 provider "aws" {
-  region = "us-east-1"
+  region = var.region
 }
-# vpc 
+
+# VPC
 resource "aws_vpc" "custom-vpc" {
-  cidr_block = var.aws_vpc_cidr
+  cidr_block           = var.aws_vpc_cidr
   enable_dns_support   = true
+  enable_dns_hostnames = true
+
   tags = {
     Name = "custom-vpc"
   }
 }
-#public subnets
+
+# Public subnets
 resource "aws_subnet" "public-subnet-1" {
   vpc_id                  = aws_vpc.custom-vpc.id
   cidr_block              = var.public_subnet_1_cidr
-  availability_zone       = "us-east-1a"
+  availability_zone       = "${var.region}a"
   map_public_ip_on_launch = true
+
   tags = {
     Name = "public-subnet-1"
   }
@@ -23,18 +28,20 @@ resource "aws_subnet" "public-subnet-1" {
 resource "aws_subnet" "public-subnet-2" {
   vpc_id                  = aws_vpc.custom-vpc.id
   cidr_block              = var.public_subnet_2_cidr
-  availability_zone       = "us-east-1b"
+  availability_zone       = "${var.region}b"
   map_public_ip_on_launch = true
+
   tags = {
     Name = "public-subnet-2"
   }
 }
 
-#private subnets
+# Private subnets
 resource "aws_subnet" "private-subnet-1" {
   vpc_id            = aws_vpc.custom-vpc.id
   cidr_block        = var.private_subnet_1_cidr
-  availability_zone = "us-east-1a"
+  availability_zone = "${var.region}a"
+
   tags = {
     Name = "private-subnet-1"
   }
@@ -43,23 +50,26 @@ resource "aws_subnet" "private-subnet-1" {
 resource "aws_subnet" "private-subnet-2" {
   vpc_id            = aws_vpc.custom-vpc.id
   cidr_block        = var.private_subnet_2_cidr
-  availability_zone = "us-east-1b"
+  availability_zone = "${var.region}b"
+
   tags = {
     Name = "private-subnet-2"
   }
 }
 
-#internet gateway
+# Internet Gateway
 resource "aws_internet_gateway" "custom-igw" {
   vpc_id = aws_vpc.custom-vpc.id
+
   tags = {
     Name = "custom-igw"
   }
 }
 
-#route table
+# Public route table
 resource "aws_route_table" "custom-route-table" {
   vpc_id = aws_vpc.custom-vpc.id
+
   tags = {
     Name = "custom-route-table"
   }
@@ -81,21 +91,32 @@ resource "aws_route_table_association" "public-subnet-2-association" {
   route_table_id = aws_route_table.custom-route-table.id
 }
 
-#nat gateway
+# NAT Gateway
 resource "aws_eip" "custom-eip" {
   domain = "vpc"
+
+  tags = {
+    Name = "custom-eip"
+  }
 }
 
 resource "aws_nat_gateway" "custom-nat-gateway" {
   allocation_id = aws_eip.custom-eip.id
   subnet_id     = aws_subnet.public-subnet-1.id
+
+  depends_on = [
+    aws_internet_gateway.custom-igw
+  ]
+
   tags = {
     Name = "custom-nat-gateway"
   }
 }
 
+# Private route table
 resource "aws_route_table" "private-route-table" {
   vpc_id = aws_vpc.custom-vpc.id
+
   tags = {
     Name = "private-route-table"
   }
@@ -117,13 +138,14 @@ resource "aws_route_table_association" "private-subnet-2-association" {
   route_table_id = aws_route_table.private-route-table.id
 }
 
-#security group
+# Bastion security group
 resource "aws_security_group" "custom-sg" {
   name        = "custom-sg"
   description = "SSH access to the bastion host"
   vpc_id      = aws_vpc.custom-vpc.id
 
   ingress {
+    description = "SSH from trusted IP"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
@@ -136,41 +158,20 @@ resource "aws_security_group" "custom-sg" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
-}
 
-resource "aws_security_group" "private-instance-sg" {
-  name        = "private-instance-sg"
-  description = "SSH access from the bastion host and HTTP access from the ALB"
-  vpc_id      = aws_vpc.custom-vpc.id
-
-  ingress {
-    from_port       = 22
-    to_port         = 22
-    protocol        = "tcp"
-    security_groups = [aws_security_group.custom-sg.id]
-  }
-
-  ingress {
-    from_port       = 80
-    to_port         = 80
-    protocol        = "tcp"
-    security_groups = [aws_security_group.alb-sg.id]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+  tags = {
+    Name = "custom-sg"
   }
 }
 
+# Application Load Balancer security group
 resource "aws_security_group" "alb-sg" {
   name        = "alb-sg"
   description = "Allow HTTP traffic to the application load balancer"
   vpc_id      = aws_vpc.custom-vpc.id
 
   ingress {
+    description = "HTTP from internet"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
@@ -183,11 +184,59 @@ resource "aws_security_group" "alb-sg" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  tags = {
+    Name = "alb-sg"
+  }
 }
 
-#ec2 instance
+# Private instance security group
+resource "aws_security_group" "private-instance-sg" {
+  name        = "private-instance-sg"
+  description = "SSH from bastion and HTTP from ALB"
+  vpc_id      = aws_vpc.custom-vpc.id
+
+  ingress {
+    description     = "SSH from bastion host"
+    from_port       = 22
+    to_port         = 22
+    protocol        = "tcp"
+    security_groups = [aws_security_group.custom-sg.id]
+  }
+
+  ingress {
+    description     = "HTTP from ALB"
+    from_port       = 80
+    to_port         = 80
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb-sg.id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "private-instance-sg"
+  }
+}
+
+# EC2 key pair
+resource "aws_key_pair" "custom-keypair" {
+  key_name   = "custom-keypair"
+  public_key = trimspace(var.aws_public_key)
+
+  tags = {
+    Name = "custom-keypair"
+  }
+}
+
+# Bastion host
 resource "aws_instance" "bastion-host" {
-  ami                         = var.ami_id # Amazon Linux 2 AMI
+  ami                         = var.ami_id
   instance_type               = var.instance_type
   subnet_id                   = aws_subnet.public-subnet-1.id
   vpc_security_group_ids      = [aws_security_group.custom-sg.id]
@@ -199,8 +248,9 @@ resource "aws_instance" "bastion-host" {
   }
 }
 
+# Private EC2 instance
 resource "aws_instance" "private-instance-1" {
-  ami                    = var.ami_id # Amazon Linux 2 AMI
+  ami                    = var.ami_id
   instance_type          = var.instance_type
   subnet_id              = aws_subnet.private-subnet-1.id
   vpc_security_group_ids = [aws_security_group.private-instance-sg.id]
@@ -220,20 +270,7 @@ resource "aws_instance" "private-instance-1" {
   }
 }
 
-resource "aws_key_pair" "custom-keypair" {
-  key_name   = "custom-keypair"
-  public_key = trimspace(var.aws_public_key)
-}
-
-output "bastion_public_ip" {
-  value = aws_instance.bastion-host.public_ip
-}
-
-output "private_instance_ip" {
-  value = aws_instance.private-instance-1.private_ip
-}
-
-#target group
+# Application Load Balancer target group
 resource "aws_lb_target_group" "custom-target-group" {
   name        = "custom-target-group"
   port        = 80
@@ -242,6 +279,7 @@ resource "aws_lb_target_group" "custom-target-group" {
   vpc_id      = aws_vpc.custom-vpc.id
 
   health_check {
+    enabled             = true
     path                = "/"
     interval            = 30
     timeout             = 5
@@ -251,6 +289,10 @@ resource "aws_lb_target_group" "custom-target-group" {
     port                = "traffic-port"
     protocol            = "HTTP"
   }
+
+  tags = {
+    Name = "custom-target-group"
+  }
 }
 
 resource "aws_lb_target_group_attachment" "private-instance-1-tg-attachment" {
@@ -259,19 +301,24 @@ resource "aws_lb_target_group_attachment" "private-instance-1-tg-attachment" {
   port             = 80
 }
 
-#load balancer
+# Application Load Balancer
 resource "aws_lb" "custom-load-balancer" {
   name               = "custom-load-balancer"
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb-sg.id]
-  subnets            = [aws_subnet.public-subnet-1.id, aws_subnet.public-subnet-2.id]
+
+  subnets = [
+    aws_subnet.public-subnet-1.id,
+    aws_subnet.public-subnet-2.id
+  ]
 
   tags = {
     Name = "custom-load-balancer"
   }
 }
 
+# HTTP listener
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.custom-load-balancer.arn
   port              = 80
@@ -283,6 +330,18 @@ resource "aws_lb_listener" "http" {
   }
 }
 
+# Outputs
+output "bastion_public_ip" {
+  description = "Public IP address of the bastion host"
+  value       = aws_instance.bastion-host.public_ip
+}
+
+output "private_instance_ip" {
+  description = "Private IP address of the private EC2 instance"
+  value       = aws_instance.private-instance-1.private_ip
+}
+
 output "load_balancer_dns_name" {
-  value = aws_lb.custom-load-balancer.dns_name
+  description = "DNS name of the application load balancer"
+  value       = aws_lb.custom-load-balancer.dns_name
 }
