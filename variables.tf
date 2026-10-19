@@ -1,3 +1,4 @@
+
 variable "region" {
   description = "AWS region to deploy resources in"
   type        = string
@@ -47,12 +48,24 @@ variable "instance_type" {
 }
 
 variable "aws_public_key" {
-  description = "SSH public key for the AWS key pair"
+  description = "SSH public key used to create the AWS key pair"
   type        = string
   sensitive   = true
+  nullable    = false
+
+  validation {
+    condition     = length(trimspace(var.aws_public_key)) > 0
+    error_message = "AWS_PUBLIC_KEY must contain your SSH public key."
+  }
 }
 
 variable "ssh_allowed_cidr" {
   description = "Trusted public IPv4 CIDR allowed to SSH to the bastion host"
   type        = string
+  nullable    = false
+
+  validation {
+    condition     = can(cidrnetmask(var.ssh_allowed_cidr))
+    error_message = "SSH_ALLOWED_CIDR must be a valid IPv4 CIDR, such as 198.51.100.42/32."
+  }
 }
