@@ -28,6 +28,10 @@ jobs:
           role-to-assume: arn:aws:iam::699158992697:role/oidc-role
           aws-region: us-east-1
 
+working-directory: .
+env:
+            TF_VAR_aws_public_key: ${{ secrets.AWS_PUBLIC_KEY }}
+
       - name: Terraform Init
         run: terraform init
 
@@ -39,3 +43,4 @@ jobs:
 
       - name: Terraform Apply
         run: terraform apply -auto-approve tfplan
+        
