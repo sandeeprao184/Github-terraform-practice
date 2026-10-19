@@ -222,7 +222,7 @@ resource "aws_instance" "private-instance-1" {
 
 resource "aws_key_pair" "custom-keypair" {
   key_name   = "custom-keypair"
-  public_key = file(pathexpand("~/.ssh/custom-keypair.pub"))
+  public_key = trimspace(var.aws_public_key)
 }
 
 output "bastion_public_ip" {
