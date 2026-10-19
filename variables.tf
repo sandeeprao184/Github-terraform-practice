@@ -46,8 +46,8 @@ variable "instance_type" {
   default     = "t3.micro"
 }
 
-variable "ssh_allowed_cidr" {
-  description = "Your public IPv4 CIDR allowed to SSH to the bastion, e.g. 203.0.113.10/32"
+variable "aws_public_key" {
+  description = "SSH public key for the AWS key pair"
   type        = string
-  default     = "0.0.0.0/0"
+  sensitive   = true
 }
