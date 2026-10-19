@@ -1,18 +1,24 @@
 name: Terraform Deploy
 
 on:
-  #push:
-   #branches: [ main ]
-  workflow_dispatch:   # ✅ Manual trigger only
+  # push:
+  #   branches:
+  #     - main
+  workflow_dispatch: # Manual trigger only
 
 permissions:
   id-token: write
   contents: read
-  
+
 jobs:
   terraform:
+    name: Terraform Deploy
     runs-on: ubuntu-latest
-    
+
+    defaults:
+      run:
+        working-directory: .
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -20,17 +26,11 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
-
-
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::699158992697:role/oidc-role
           aws-region: us-east-1
-
-working-directory: .
-env:
-            TF_VAR_aws_public_key: ${{ secrets.AWS_PUBLIC_KEY }}
 
       - name: Terraform Init
         run: terraform init
@@ -39,8 +39,11 @@ env:
         run: terraform validate
 
       - name: Terraform Plan
+        env:
+          TF_VAR_aws_public_key: ${{ secrets.AWS_PUBLIC_KEY }}
         run: terraform plan -out=tfplan
 
       - name: Terraform Apply
+        env:
+          TF_VAR_aws_public_key: ${{ secrets.AWS_PUBLIC_KEY }}
         run: terraform apply -auto-approve tfplan
-        
