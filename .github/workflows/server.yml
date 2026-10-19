@@ -1,19 +1,21 @@
+```yaml
 name: Terraform Destroy
 
 on:
   workflow_dispatch:
-  # Uncomment to deploy automatically when changes are pushed to main
-  # push:
-  #   branches:
-  #     - main
+    inputs:
+      confirm_destroy:
+        description: "Type DESTROY to confirm infrastructure deletion"
+        required: true
+        type: string
 
 permissions:
   id-token: write
   contents: read
 
 jobs:
-  terraform:
-    name: Terraform Destroy
+  terraform-destroy:
+    name: Destroy AWS Infrastructure
     runs-on: ubuntu-latest
 
     defaults:
@@ -21,6 +23,17 @@ jobs:
         working-directory: .
 
     steps:
+      - name: Validate Confirmation
+        env:
+          CONFIRM_DESTROY: ${{ inputs.confirm_destroy }}
+        run: |
+          if [ "$CONFIRM_DESTROY" != "DESTROY" ]; then
+            echo "Confirmation failed. Type DESTROY exactly."
+            exit 1
+          fi
+
+          echo "Destroy confirmation accepted."
+
       - name: Checkout Code
         uses: actions/checkout@v4
 
@@ -42,14 +55,15 @@ jobs:
       - name: Terraform Validate
         run: terraform validate
 
-      - name: Terraform Plan
+      - name: Terraform Destroy Plan
         env:
           TF_VAR_aws_public_key: ${{ secrets.AWS_PUBLIC_KEY }}
           TF_VAR_ssh_allowed_cidr: ${{ secrets.SSH_ALLOWED_CIDR }}
-        run: terraform plan -out=tfplan
+        run: terraform plan -destroy -out=tfplan
 
-      - name: Terraform destroy
+      - name: Terraform Destroy
         env:
           TF_VAR_aws_public_key: ${{ secrets.AWS_PUBLIC_KEY }}
           TF_VAR_ssh_allowed_cidr: ${{ secrets.SSH_ALLOWED_CIDR }}
-        run: terraform destroy -auto-approve tfplan
+        run: terraform apply -auto-approve tfplan
+```
