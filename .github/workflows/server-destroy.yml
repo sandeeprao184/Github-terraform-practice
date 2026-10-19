@@ -1,4 +1,4 @@
-```yaml
+
 name: Terraform Destroy
 
 on:
@@ -38,4 +38,31 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Terraform
-        uses: hashicorp/setup
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::699158992697:role/oidc-role
+          aws-region: us-east-1
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Destroy Plan
+        env:
+          TF_VAR_aws_public_key: ${{ secrets.AWS_PUBLIC_KEY }}
+          TF_VAR_ssh_allowed_cidr: ${{ secrets.SSH_ALLOWED_CIDR }}
+        run: terraform plan -destroy -out=destroy.tfplan
+
+      - name: Terraform Destroy
+        env:
+          TF_VAR_aws_public_key: ${{ secrets.AWS_PUBLIC_KEY }}
+          TF_VAR_ssh_allowed_cidr: ${{ secrets.SSH_ALLOWED_CIDR }}
+        run: terraform apply -auto-approve destroy.tfplan
