@@ -1,4 +1,3 @@
-```hcl
 variable "region" {
   description = "AWS region to deploy resources in"
   type        = string
@@ -57,4 +56,3 @@ variable "ssh_allowed_cidr" {
   description = "Trusted public IPv4 CIDR allowed to SSH to the bastion host"
   type        = string
 }
-```
